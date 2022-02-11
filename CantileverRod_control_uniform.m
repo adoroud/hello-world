@@ -1,5 +1,5 @@
 %% Inverse Dynamic Control of Cantilever Rod using Cosserat-Rod model (Actuation Forces + Gravity Force + External Forces)
-%Azadeh version created 2/10/22
+%Azadeh version created 1/12/22
 %Bending for grasping-Silicone
 
 %visialization: finally a uniform and tapering 3D arm with 3 physical
@@ -10,22 +10,22 @@
 
 function output= CantileverRod_control_uniform
 %% Parameters - Section 2.1
-global fseg lseg rhoAg C q t result ud vd state_out segment N kapa_out lseg
+global fseg lseg rhoAg C q t result ud vd state_out segment N
 % N L STEPS 
 %% Video recording ()
 % myVideo = VideoWriter('grasp'); %open video file
 % myVideo.FrameRate = 1;  %can adjust this, 5 - 10 works well for me
 % open(myVideo)
 %% Time descretization
-del_t = 1; %0.025; % Time step= 0.01 is good ds=5ms
-% del_t = 0.0336; %0.0250
-STEPS = 50;
+del_t = 1; % Time step= 0.01 is good ds=5ms
+% del_t = 0.0336;
+STEPS = 100;
 t= zeros(STEPS,1);
 %% Space discretezition
 scale = 1;
-physical_segment = 1;
-decretized_sections = 2;
-N = physical_segment*decretized_sections; %40 ; Number of discretization for rod = 4 * number of nodes per segment
+physical_segment = 3;
+decretized_sections = 10;
+N = physical_segment*decretized_sections;      %40 ; Number of discretization for rod = 4 * number of nodes per segment
 L = physical_segment*0.185*scale; % Length of rod %L>>r cross-section diameter or sqrt(A)
 ds = L/N;    % Discretization of curve parameter and step size in RK4
 % ds = del_t;
@@ -34,18 +34,14 @@ result = zeros(STEPS,19,N+1);
 state_out = zeros(STEPS,6,N+1);
 % seg_num = zeros(physical_segment,1);
 circle = zeros(301,3);  %visualization cylindrical view
-p_c = zeros(301,3,N+1);  %surface of the cylinder
-% pressure = 0.01*20*6894.76;  %psi to N/m2
-% pressure_2 = 0.04*20*6894.76;  %psi to N/m2
+p_c = zeros(301,3,N+1);  %the points of the arm on the cylindar serface
 %% vectors directions in 3D
-e1 = [ 1 ; 0 ; 0 ];
-e2 = [ 0 ; 1 ; 0 ];
-e3 = [ 0 ; 0 ; 1 ];
+% e1 = [ 1 ; 0 ; 0 ];
+% e2 = [ 0 ; 1 ; 0 ];
+% e3 = [ 0 ; 0 ; 1 ];
 %% desired motions-initial
 ud = zeros(STEPS,3,N+1);
 vd = zeros(STEPS,3,N+1);
-
-kapa = 0;
 % u_xd = zeros(1,N+1);  %bending element of strain
 % ut_xd = zeros(1,N+1);
 % utt_xd = zeros(1,N+1);
@@ -82,15 +78,14 @@ ustar = [ 0 ; 0 ; 0 ];   % initial curvature for a straight rod (rotation deriva
 rho = 800;   %507kg/m3 % 2330; % 1.3468e3;    % Hydrogel density=1.1 - Beam density=M(3e-3)/V(2.2275e-6)=1.3468e3
 % rhow = 1000;
 
-% C = 0.0041*eye(3); % Square law drag air resistance- in our case damping coefficient in water
+C = 0; %0.0041*eye(3); % Square law drag air resistance- in our case damping coefficient in water
 % C=0.0262*eye(3);  %old value
-C=zeros(3,3);
+% C=zeros(3,3);
 
 % r0 = 0.003*scale;         % Hydrogel voxel center of mass distance to the backbone
 % r = 0.003*e2;    % Hydrogel voxel center of mass distance to the backbone
 % r = 0.003*e3;    % Hydrogel voxel center of mass distance to the backbone
-r1 = 0.034*[cos(-pi/4);sin(-pi/4);0];   %pressure tube number 1 distance to the backbone
-r2 = 0.034*[cos(pi/4);sin(pi/4);0];   %pressure tube number 2 distance to the backbone
+
 %% uniform arm
 r0 = 0.075*sqrt(2)/2;
 % beam_height = 1e-3*scale; %backbone or beam 11mm total %x direction
@@ -103,13 +98,12 @@ r0 = 0.075*sqrt(2)/2;
 A0 = pi*r0^2;  %circular  %rectangular: beam_height*beam_width; % Cross-sectional area
 % radius = sqrt(A); %L>>r cross-section diameter approximation or sqrt(A)
 % delta_L = L/radius;  %beam_length/beam_width
-A =A0; %in the silicone arm this won't change significantly and it is passive
 %% Young modulus of Hydrogel beam, was E=(L=0.045/A=11*4.5e-6)*(2.2061)=2.005e3
 % Hydrogel from Ximin data 5kPa at rest, 30kPa at actuation
 % New data from Roozbeh, diff hydrogels from 20kPa to 80kPa at rest
 % E for Rubber=10-100 MPa, Nylon=2-4 GPa, 
 %E = (L/A)*(0.0542)*1;   %E=271 when L is considered for stiffness (0.0542 in mm scale)
-Em = 0.28*10^6; %188*10^9;   %0.3*1000*scale^2*(0.0542*scale)/A0;  %E=6000 when L is not considered for rigidity
+Em = 0.27*10^6; %188*10^9;   %0.3*1000*scale^2*(0.0542*scale)/A0;  %E=6000 when L is not considered for rigidity
 Gm = Em/(2*(1 + 0.4));   %Shear modulus
 
 Ixx = (pi/4)*r0^4;  %circular   %rectangular: (beam_height*beam_width^3)/12;
@@ -117,7 +111,7 @@ Iyy = (pi/4)*r0^4;  %circular   %rectangular: (beam_width*beam_height^3)/12;
 Izz=Ixx+Iyy;
 J = diag([Ixx  Iyy  Izz]); % Second mass moment of inertia tensor
 
-Kse = diag([Gm*A0, Gm*A0, 10*Em*A0]); % Stiffness matrix for shear(d1,d2) rigidity and extension(d3) or axial rigidity
+Kse = diag([Gm*A0, Gm*A0, Em*A0]); % Stiffness matrix for shear(d1,d2) rigidity and extension(d3) or axial rigidity
 Kbt = diag([Em*J(1,1), Em*J(2,2), Gm*J(3,3)]); % Stiffness matrix for bending(d1,d2)rigidity and twisting(d3) rigidity
 
 % Bse = zeros(3); % viscous damping matrix for shear & extension
@@ -186,7 +180,7 @@ G = zeros(6,1) ; % Shooting method initial guess
         
         result(i,:,:) = y;    %saving results
         state_out(i,:,:) = z;  %saving u,v output during time and space
-        kapa_out(i) = kapa;
+    
         plotRobot();
     end
 %% getResidual Function
@@ -235,7 +229,7 @@ G = zeros(6,1) ; % Shooting method initial guess
        %The fsolve will be solved for E=0, then both BVP will be
        %satisfied.(TPBVP:two point boundary value problem)
         nL = y(8:10, N+1); mL = y(11:13 ,N+1);
-        F_tip(i,:) = [0;0;0]'+ fseg(i,:,end)+ rhoAg'- (R*C*q.*abs(q))';  %0.001*9.81*[0;0;0];  % 
+        F_tip(i,:) = [0;0;0]'+ rhoAg'- (R*C*q.*abs(q))'+ fseg(i,:,end);  %0.001*9.81*[0;0;0];  %rhoAg' +
         M_tip(i,:) = [0;0;0]'+ lseg(i,:,end);  %0.001*[0.01;0;0];
         E = [F_tip(i,:)'-nL; M_tip(i,:)'-mL]; 
         free_end(i,:) = E;
@@ -271,16 +265,14 @@ G = zeros(6,1) ; % Shooting method initial guess
         %Solved - Eq.(6)- Constitutive Law - Configuration space variables-local frame
         v = Kse_plus_c0_Bse_inv*(R'*n + Kse_vstar - Bse*vh);  
         u = Kbt_plus_c0_Bbt_inv*(R'*m + Kbt_ustar - Bbt*uh);  
-        if p(1)==0
-            kapa=0;
-        else
-            p_local = R'*p;
-            kapa = -2*p_local(1)/(p_local(1)^2+p_local(3)^2);   %curvature_about_x_axis
-        end
-        %             % forward solution by the robot
-%             u = [0; kapa; 0];
-%             extension_strain = 1; %dL/L;
-%             v = [0; 0; extension_strain];
+%         if y(1)==0
+%             kapa=0;
+%         else
+%             kapa = 2*p(1)/(p(1)^2+p(3)^2);   %curvature_about_x_axis
+%             % forward solution by the robot
+% %             u = [0; kapa; 0];
+% %             v = [0; 0; (dL)/ds];
+%         end
 %         error_of_curvature_about_x_axis = u(2)-4*kapa;
         %% the rest...
         z = [v; u];
@@ -305,23 +297,18 @@ G = zeros(6,1) ; % Shooting method initial guess
 %          f = rhoAg; 
          fenv = rhoAg - R*C*q.*abs(q); %without water drag effect  
 %          fenv = rhowAg - R*C*q.*abs(q);   %with water drag effect
-         lenv = cross([0;0;0],fenv); %zero distance as long as it is applied to the backbone directly
+         lenv = cross(fenv,[0;0;0]);
         %% when external loads being applied (like from the object being detected by FSR)
-        fext = [0;0;0];   %external force to the segment (constant and local)
-        lext = cross(r0*[1;0;0],R*fext);   %external moment to the segment (constant and global) in desired direction
-       %% open loop control 20psi step input
-%         fseg(i,:,segment) = [0;0;0]; %-(pressure_1*A*Rs*e3 + pressure_2*A*Rs*e3);
-%         lseg(i,:,segment) =  R*(cross(r1+r2,pressure*A*e3)); %this is not per unit length
-
-%         fseg(i,:,segment) = -(pressure_1*A*Rs*e3 + pressure_2*A*Rs*e3);   
-%         lseg(i,:,segment) =  -(pressure_1*A*R*(cross((v+cross(u,r1)),e3)+cross(r1,cross(u,e3))) + pressure_2*A*R*(cross((v+cross(u,r2)),e3)+cross(r2,cross(u,e3))));
+        fext = [0;0;0];   %external force to the segment (constant and global)
+        lext = cross(fext,[0;0;0]);   %external moment to the segment (constant and global)
+        
        %% PD control-shear -part of solving inverse dynamics- global frame- where we close the loop
 %         [u_d,ut_d,utt_d,v_d,vt_d,vtt_d]=grasp(segment);
         grasp();
         ud(i,:,node+1) = u_d;
         vd(i,:,node+1) = v_d;
-        fseg(i,:,segment) = -R*( Kse*(v_d-v) + Bse*(vt_d-vt) + vtt_d) - fenv -fext;  
-        lseg(i,:,segment) = -1*R*( Kbt*(u_d-u) + Bbt*(ut_d-ut) + utt_d) -lenv -lext; %
+        fseg(i,:,segment) = R*( Kse*(v_d-v) + Bse*(vt_d-vt) + vtt_d) - fenv -fext;  
+        lseg(i,:,segment) = 20*R*( Kbt*(u_d-u) + Bbt*(ut_d-ut) + utt_d) -lenv -lext; %
 %         fseg(i,:,segment) = R*[(4/3)*-70 0 0;0 (4/3)*-5*0.001 0;0 0 1]*( Kse*(v_d(:,segment)-v) + Bse*(vt_d(:,segment)-vt) + vtt_d(:,segment)) - fenv -fext;  
 %         lseg(i,:,segment) = R*[1 0 0;0 1 0;0 0 1]*( Kbt*(u_d(:,segment)-u) + Bbt*(ut_d(:,segment)-ut) - utt_d(:,segment)) -lext;
         %         [0.001/2 0 0;0 0.01 0;0 0 1]  %for sin case
@@ -335,8 +322,14 @@ G = zeros(6,1) ; % Shooting method initial guess
 %% calculating the input to the segment for the next loop considering all dynamics
        
         ns = R*rhoA*(cross(w,q)+qt) - fseg(i,:,segment)' -fenv - fext;
-        ms = R*( cross(w, rhoJ*w) + rhoJ*wt) - cross(ps, n) - lseg(i,:,segment)' - lext -lenv;
-   
+        ms = R*( cross(w, rhoJ*w) + rhoJ*wt) - cross(ps, n) - lseg(i,:,segment)' - lext;
+
+%         %%based on constitutive laws - may not be correct 
+%         ns = Rs*R'*n - fseg(i,:,segment)' - fext; 
+%         ms = Rs*R'*m - lseg(i,:,segment)'- lext; 
+%         ns = Rs*(Kse*(v-vstar)+Bse*vt)- fseg(i,:,segment)'- fext;
+%         ms = Rs*(Kbt*(u-ustar)+Bbt*ut)- lseg(i,:,segment)'- lext;
+        
         %compatibility
         qs = vt - cross(u , q) + cross(w, v) ;
         ws = ut - cross(u ,w) ;
@@ -386,7 +379,7 @@ G = zeros(6,1) ; % Shooting method initial guess
 
              elseif segment==2
 
-                 alpha= 5; %6/physical_segment;
+                 alpha= 0.6; %6/physical_segment;
 
                  u_xd =  0; %alpha*(sin(2*pi*frequency*t)); %+pi/2 %angle of changes
                  ut_xd =  0; %alpha*(2*pi*frequency)*cos(2*pi*frequency*t);
@@ -475,14 +468,15 @@ G = zeros(6,1) ; % Shooting method initial guess
             if mod(j-1,N/physical_segment)==0
                     plot3(100*p_c1(j,:), 100*p_c2(j,:), 100*p_c3(j,:),'Marker','o','Markersize',4,'MarkerEdgeColor','k'); %'Color',[1 0 0],'LineWidth',1,
             end
-        end    
+        end
+    
     %             hold on;
     %             hold off;
                 grid on;          
                 ax = gca;
-                ax.XDir = 'reverse';
-                ax.YDir = 'reverse';
-                ax.ZDir = 'normal';
+                ax.XDir = 'normal';
+                ax.YDir = 'normal';
+                ax.ZDir = 'reverse';
                 axis([-50 50 -50 50 0  100]) ;
                 xlabel('X(cm)');ylabel('Y(cm)');zlabel('Z(cm)');
     %           daspect ([ 2 1 1 ]); 
