@@ -1,5 +1,5 @@
 %% Inverse Dynamic Control of Cantilever Rod using Cosserat-Rod model (Actuation Forces + Gravity Force + External Forces)
-%Azadeh version created 2/9/22
+%Azadeh version created 2/10/22
 %Bending for grasping-Silicone
 
 %visialization: finally a uniform and tapering 3D arm with 3 physical
@@ -19,13 +19,13 @@ global fseg lseg rhoAg C q t result ud vd state_out segment N kapa_out lseg
 %% Time descretization
 del_t = 1; %0.025; % Time step= 0.01 is good ds=5ms
 % del_t = 0.0336; %0.0250
-STEPS = 100;
+STEPS = 50;
 t= zeros(STEPS,1);
 %% Space discretezition
 scale = 1;
 physical_segment = 1;
-decretized_sections = 10;
-N = physical_segment*decretized_sections;      %40 ; Number of discretization for rod = 4 * number of nodes per segment
+decretized_sections = 2;
+N = physical_segment*decretized_sections; %40 ; Number of discretization for rod = 4 * number of nodes per segment
 L = physical_segment*0.185*scale; % Length of rod %L>>r cross-section diameter or sqrt(A)
 ds = L/N;    % Discretization of curve parameter and step size in RK4
 % ds = del_t;
@@ -45,7 +45,7 @@ e3 = [ 0 ; 0 ; 1 ];
 ud = zeros(STEPS,3,N+1);
 vd = zeros(STEPS,3,N+1);
 
-kapa = zeros(1,N+1);
+kapa = 0;
 % u_xd = zeros(1,N+1);  %bending element of strain
 % ut_xd = zeros(1,N+1);
 % utt_xd = zeros(1,N+1);
@@ -186,7 +186,7 @@ G = zeros(6,1) ; % Shooting method initial guess
         
         result(i,:,:) = y;    %saving results
         state_out(i,:,:) = z;  %saving u,v output during time and space
-%         kapa_out(i,:) = kapa;
+        kapa_out(i) = kapa;
         plotRobot();
     end
 %% getResidual Function
@@ -235,7 +235,7 @@ G = zeros(6,1) ; % Shooting method initial guess
        %The fsolve will be solved for E=0, then both BVP will be
        %satisfied.(TPBVP:two point boundary value problem)
         nL = y(8:10, N+1); mL = y(11:13 ,N+1);
-        F_tip(i,:) = [0;0;0]'+ rhoAg'- (R*C*q.*abs(q))'+ fseg(i,:,end);  %0.001*9.81*[0;0;0];  %rhoAg' +
+        F_tip(i,:) = [0;0;0]'+ fseg(i,:,end)+ rhoAg'- (R*C*q.*abs(q))';  %0.001*9.81*[0;0;0];  % 
         M_tip(i,:) = [0;0;0]'+ lseg(i,:,end);  %0.001*[0.01;0;0];
         E = [F_tip(i,:)'-nL; M_tip(i,:)'-mL]; 
         free_end(i,:) = E;
@@ -271,15 +271,16 @@ G = zeros(6,1) ; % Shooting method initial guess
         %Solved - Eq.(6)- Constitutive Law - Configuration space variables-local frame
         v = Kse_plus_c0_Bse_inv*(R'*n + Kse_vstar - Bse*vh);  
         u = Kbt_plus_c0_Bbt_inv*(R'*m + Kbt_ustar - Bbt*uh);  
-%         if y(1)==0
-%             kapa=0;
-%         else
+        if p(1)==0
+            kapa=0;
+        else
             p_local = R'*p;
-            kapa(node+1) = -2*p_local(1)/(p_local(1)^2+p_local(3)^2);   %curvature_about_x_axis
-%             % forward solution by the robot
-%             u = [0; -kapa(node+1); 0];
-%             v = [0; 0; (dL)/ds];
-%         end
+            kapa = -2*p_local(1)/(p_local(1)^2+p_local(3)^2);   %curvature_about_x_axis
+        end
+        %             % forward solution by the robot
+%             u = [0; kapa; 0];
+%             extension_strain = 1; %dL/L;
+%             v = [0; 0; extension_strain];
 %         error_of_curvature_about_x_axis = u(2)-4*kapa;
         %% the rest...
         z = [v; u];
@@ -320,7 +321,7 @@ G = zeros(6,1) ; % Shooting method initial guess
         ud(i,:,node+1) = u_d;
         vd(i,:,node+1) = v_d;
         fseg(i,:,segment) = -R*( Kse*(v_d-v) + Bse*(vt_d-vt) + vtt_d) - fenv -fext;  
-        lseg(i,:,segment) = -30*R*( Kbt*(u_d-u) + Bbt*(ut_d-ut) + utt_d) -lenv -lext; %
+        lseg(i,:,segment) = -1*R*( Kbt*(u_d-u) + Bbt*(ut_d-ut) + utt_d) -lenv -lext; %
 %         fseg(i,:,segment) = R*[(4/3)*-70 0 0;0 (4/3)*-5*0.001 0;0 0 1]*( Kse*(v_d(:,segment)-v) + Bse*(vt_d(:,segment)-vt) + vtt_d(:,segment)) - fenv -fext;  
 %         lseg(i,:,segment) = R*[1 0 0;0 1 0;0 0 1]*( Kbt*(u_d(:,segment)-u) + Bbt*(ut_d(:,segment)-ut) - utt_d(:,segment)) -lext;
         %         [0.001/2 0 0;0 0.01 0;0 0 1]  %for sin case
@@ -365,7 +366,7 @@ G = zeros(6,1) ; % Shooting method initial guess
 
              if segment==1
 
-                 alpha= 1; %6/physical_segment;
+                 alpha= 0.1; %6/physical_segment;
 
                  u_xd =  0; %alpha*(sin(2*pi*frequency*t)); %+pi/2 %angle of changes
                  ut_xd =  0; %alpha*(2*pi*frequency)*cos(2*pi*frequency*t);
